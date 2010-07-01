@@ -294,7 +294,7 @@ fwbase_dirs_to_document := \
 # as "final" in the official SDK APIs.
 fwbase_dirs_to_document += core/config/sdk
 
-# These are relative to dalvik/libcore
+# These are relative to libcore
 # Intentionally not included from libcore:
 #     icu openssl suncompat support
 libcore_to_document := \
@@ -334,7 +334,7 @@ non_base_dirs := \
 dirs_to_document := \
 	$(fwbase_dirs_to_document) \
 	$(non_base_dirs) \
-	$(addprefix ../../dalvik/libcore/, $(libcore_to_document))
+	$(addprefix ../../libcore/, $(libcore_to_document))
 
 html_dirs := \
 	$(FRAMEWORKS_BASE_SUBDIRS) \

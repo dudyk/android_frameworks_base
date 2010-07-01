@@ -667,6 +667,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         mInputThread.start();
+        mQueue.start();
 
         // Add ourself to the Watchdog monitors.
         Watchdog.getInstance().addMonitor(this);
@@ -6575,18 +6576,30 @@ public class WindowManagerService extends IWindowManager.Stub
                             case RawInputEvent.CLASS_KEYBOARD:
                                 KeyEvent ke = (KeyEvent)ev.event;
                                 if (ke.isDown()) {
-                                    lastKey = ke;
-                                    downTime = curTime;
-                                    keyRepeatCount = 0;
                                     lastKeyTime = curTime;
-                                    nextKeyTime = lastKeyTime
-                                            + ViewConfiguration.getLongPressTimeout();
-                                    if (DEBUG_INPUT) Slog.v(
-                                        TAG, "Received key down: first repeat @ "
-                                        + nextKeyTime);
+                                    if (lastKey != null &&
+                                            ke.getKeyCode() == lastKey.getKeyCode()) {
+                                        keyRepeatCount++;
+                                        // Arbitrary long timeout to block
+                                        // repeating here since we know that
+                                        // the device driver takes care of it.
+                                        nextKeyTime = lastKeyTime + LONG_WAIT;
+                                        if (DEBUG_INPUT) Slog.v(
+                                                TAG, "Received repeated key down");
+                                    } else {
+                                        downTime = curTime;
+                                        keyRepeatCount = 0;
+                                        nextKeyTime = lastKeyTime
+                                                + ViewConfiguration.getLongPressTimeout();
+                                        if (DEBUG_INPUT) Slog.v(
+                                            TAG, "Received key down: first repeat @ "
+                                            + nextKeyTime);
+                                    }
+                                    lastKey = ke;
                                 } else {
                                     lastKey = null;
                                     downTime = 0;
+                                    keyRepeatCount = 0;
                                     // Arbitrary long timeout.
                                     lastKeyTime = curTime;
                                     nextKeyTime = curTime + LONG_WAIT;
@@ -6594,7 +6607,12 @@ public class WindowManagerService extends IWindowManager.Stub
                                         TAG, "Received key up: ignore repeat @ "
                                         + nextKeyTime);
                                 }
-                                dispatchKey((KeyEvent)ev.event, 0, 0);
+                                if (keyRepeatCount > 0) {
+                                    dispatchKey(KeyEvent.changeTimeRepeat(ke,
+                                            ke.getEventTime(), keyRepeatCount), 0, 0);
+                                } else {
+                                    dispatchKey(ke, 0, 0);
+                                }
                                 mQueue.recycleEvent(ev);
                                 break;
                             case RawInputEvent.CLASS_TOUCHSCREEN:
@@ -8733,7 +8751,8 @@ public class WindowManagerService extends IWindowManager.Stub
             for (int i=0; i<N; i++) {
                 WindowState win = allAppWindows.get(i);
                 if (win == startingWindow || win.mAppFreezing
-                        || win.mViewVisibility != View.VISIBLE) {
+                        || win.mViewVisibility != View.VISIBLE
+                        || win.mAttrs.type == TYPE_APPLICATION_STARTING) {
                     continue;
                 }
                 if (DEBUG_VISIBILITY) {
@@ -11377,6 +11396,7 @@ public class WindowManagerService extends IWindowManager.Stub
                             "DimSurface",
                             -1, 16, 16, PixelFormat.OPAQUE,
                             Surface.FX_SURFACE_DIM);
+                    mDimSurface.setAlpha(0.0f);
                 } catch (Exception e) {
                     Slog.e(TAG, "Exception creating Dim surface", e);
                 }

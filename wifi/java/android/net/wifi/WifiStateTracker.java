@@ -314,6 +314,7 @@ public class WifiStateTracker extends NetworkStateTracker {
     private static String LS = System.getProperty("line.separator");
 
     private static String[] sDnsPropNames;
+    private Runnable mReleaseWakeLockCallback;
 
     /**
      * A structure for supplying information about a supplicant state
@@ -371,9 +372,9 @@ public class WifiStateTracker extends NetworkStateTracker {
         mSettingsObserver = new SettingsObserver(new Handler());
 
         mInterfaceName = SystemProperties.get("wifi.interface", "tiwlan0");
-        sDnsPropNames = new String[] {
-            "dhcp." + mInterfaceName + ".dns1",
-            "dhcp." + mInterfaceName + ".dns2"
+        mDnsPropNames = new String[] {
+            "net." + mInterfaceName + ".dns1",
+            "net." + mInterfaceName + ".dns2"
         };
         mBatteryStats = IBatteryStats.Stub.asInterface(ServiceManager.getService("batteryinfo"));
 
@@ -415,15 +416,6 @@ public class WifiStateTracker extends NetworkStateTracker {
     private void setTornDownByConnMgr(boolean flag) {
         mTornDownByConnMgr = flag;
         updateNetworkInfo();
-    }
-
-    /**
-     * Return the IP addresses of the DNS servers available for the WLAN
-     * network interface.
-     * @return a list of DNS addresses, with no holes.
-     */
-    public String[] getNameServers() {
-        return getNameServerList(sDnsPropNames);
     }
 
     /**
@@ -1357,7 +1349,7 @@ public class WifiStateTracker extends NetworkStateTracker {
         int netId = -1;
         String[] lines = reply.split("\n");
         for (String line : lines) {
-            String[] prop = line.split(" *= *");
+            String[] prop = line.split(" *= *", 2);
             if (prop.length < 2)
                 continue;
             String name = prop[0];
@@ -1928,6 +1920,17 @@ public class WifiStateTracker extends NetworkStateTracker {
     }
 
     /**
+     * Get power mode
+     * @return power mode
+     */
+    public synchronized int getPowerMode() {
+        if (mWifiState.get() != WIFI_STATE_ENABLED && !isDriverStopped()) {
+            return -1;
+        }
+        return WifiNative.getPowerModeCommand();
+    }
+
+    /**
      * Set power mode
      * @param mode
      *     DRIVER_POWER_MODE_AUTO
@@ -2252,6 +2255,8 @@ public class WifiStateTracker extends NetworkStateTracker {
                 case EVENT_DHCP_START:
                     
                     boolean modifiedBluetoothCoexistenceMode = false;
+                    int powerMode = DRIVER_POWER_MODE_AUTO;
+
                     if (shouldDisableCoexistenceMode()) {
                         /*
                          * There are problems setting the Wi-Fi driver's power
@@ -2275,8 +2280,16 @@ public class WifiStateTracker extends NetworkStateTracker {
                         setBluetoothCoexistenceMode(
                                 WifiNative.BLUETOOTH_COEXISTENCE_MODE_DISABLED);
                     }
-
-                    setPowerMode(DRIVER_POWER_MODE_ACTIVE);
+                    
+                    powerMode = getPowerMode();
+                    if (powerMode < 0) {
+                      // Handle the case where supplicant driver does not support
+                      // getPowerModeCommand.
+                        powerMode = DRIVER_POWER_MODE_AUTO;
+                    }
+                    if (powerMode != DRIVER_POWER_MODE_ACTIVE) {
+                        setPowerMode(DRIVER_POWER_MODE_ACTIVE);
+                    }
 
                     synchronized (this) {
                         // A new request is being made, so assume we will callback
@@ -2292,7 +2305,9 @@ public class WifiStateTracker extends NetworkStateTracker {
                             NetworkUtils.getDhcpError());
                     }
 
-                    setPowerMode(DRIVER_POWER_MODE_AUTO);
+                    if (powerMode != DRIVER_POWER_MODE_ACTIVE) {
+                        setPowerMode(powerMode);
+                    }
 
                     if (modifiedBluetoothCoexistenceMode) {
                         // Set the coexistence mode back to its default value

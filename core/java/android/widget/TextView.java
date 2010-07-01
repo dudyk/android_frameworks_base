@@ -4510,6 +4510,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     partialStartOffset = 0;
                     partialEndOffset = N;
                 } else {
+                    // Now use the delta to determine the actual amount of text
+                    // we need.
+                    partialEndOffset += delta;
                     // Adjust offsets to ensure we contain full spans.
                     if (content instanceof Spanned) {
                         Spanned spanned = (Spanned)content;
@@ -4525,10 +4528,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         }
                     }
                     outText.partialStartOffset = partialStartOffset;
-                    outText.partialEndOffset = partialEndOffset;
-                    // Now use the delta to determine the actual amount of text
-                    // we need.
-                    partialEndOffset += delta;
+                    outText.partialEndOffset = partialEndOffset - delta;
+
                     if (partialStartOffset > N) {
                         partialStartOffset = N;
                     } else if (partialStartOffset < 0) {
@@ -4547,6 +4548,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     outText.text = TextUtils.substring(content, partialStartOffset,
                             partialEndOffset);
                 }
+            } else {
+                outText.partialStartOffset = 0;
+                outText.partialEndOffset = 0;
+                outText.text = "";
             }
             outText.flags = 0;
             if (MetaKeyKeyListener.getMetaState(mText, MetaKeyKeyListener.META_SELECTING) != 0) {
@@ -4588,6 +4593,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                                     + ": " + ims.mTmpExtracted.text);
                             imm.updateExtractedText(this, req.token,
                                     mInputMethodState.mTmpExtracted);
+                            ims.mChangedStart = EXTRACT_UNKNOWN;
+                            ims.mChangedEnd = EXTRACT_UNKNOWN;
+                            ims.mChangedDelta = 0;
+                            ims.mContentChanged = false;
                             return true;
                         }
                     }
@@ -6163,8 +6172,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 ims.mChangedStart = start;
                 ims.mChangedEnd = start+before;
             } else {
-                if (ims.mChangedStart > start) ims.mChangedStart = start;
-                if (ims.mChangedEnd < (start+before)) ims.mChangedEnd = start+before;
+                ims.mChangedStart = Math.min(ims.mChangedStart, start);
+                ims.mChangedEnd = Math.max(ims.mChangedEnd, start + before - ims.mChangedDelta);
             }
             ims.mChangedDelta += after-before;
         }
