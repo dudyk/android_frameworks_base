@@ -246,10 +246,9 @@ void DisplayHardware::init(uint32_t dpy)
     LOGI("version   : %s", glGetString(GL_VERSION));
     LOGI("extensions: %s", gl_extensions);
 
-    if (strstr(gl_renderer, "Adreno")) {
-        LOGD("Assuming uncached graphics buffers.");
+#ifdef BOARD_NO_CACHED_BUFFERS
         mFlags &= ~CACHED_BUFFERS;
-    }
+#endif
 
     if (strstr(gl_extensions, "GL_ARB_texture_non_power_of_two")) {
         mFlags |= NPOT_EXTENSION;

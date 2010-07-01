@@ -23,6 +23,10 @@ ifeq ($(TARGET_BOARD_PLATFORM), msm7k)
 	LOCAL_CFLAGS += -DDIM_WITH_TEXTURE
 endif
 
+ifeq ($(BOARD_NO_CACHED_BUFFERS),true)
+    LOCAL_CFLAGS += -DBOARD_NO_CACHED_BUFFERS
+endif
+
 # need "-lrt" on Linux simulator to pick up clock_gettime
 ifeq ($(TARGET_SIMULATOR),true)
 	ifeq ($(HOST_OS),linux)
